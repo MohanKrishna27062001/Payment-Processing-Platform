@@ -1,0 +1,16 @@
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Frontend (added later)
+node_modules/
+dist/
+
+# Local env files
+.env
+.env.*
