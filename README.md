@@ -371,6 +371,13 @@ Request values are never echoed back in error messages, so card data and secrets
 
 ## 4. Architectural overview
 
+![Architecture: the dashboard calls the Spring Boot API, which runs idempotency, the payment state machine and the outbox in one transaction against PostgreSQL; a background worker claims outbox jobs and settles through the payment processor](docs/architecture.png)
+
+The domain entities are at the top. Below them, a request flows left to right: dashboard, then the filter chain and controllers, `IdempotencyService`, `PaymentService` (state machine and audit event), and `OutboxService`, all in one database transaction. The outbox worker runs separately, claims due jobs with `SKIP LOCKED` and settles through the same `PaymentProcessorClient`. Actuator reports queue depth and lag.
+
+<details>
+<summary>Text version of the diagram</summary>
+
 ```
 ┌──────────────────┐   /api (Vite proxy)   ┌────────────── Spring Boot application ───────────────┐
 │ React dashboard  │ ────────────────────► │ CorrelationIdFilter → Security (JWT) → MerchantMdc   │
@@ -389,6 +396,8 @@ Request values are never echoed back in error messages, so card data and secrets
                                                                   ▼
           PostgreSQL: merchants · payments · payment_events · idempotency_keys · outbox_jobs
 ```
+
+</details>
 
 | Package | Responsibility |
 |---|---|
