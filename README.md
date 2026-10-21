@@ -829,10 +829,21 @@ affect unrelated requests. A circuit breaker is the next step — see
 
 ### 6.7 Concurrency on a single payment
 
-`payments` carries a JPA `@Version`. Two simultaneous captures both read version 3; the first commits and bumps
-it, the second's `UPDATE … WHERE version = 3` matches no rows and becomes `409 CONCURRENT_MODIFICATION`. The
-client re-reads and sees the payment is already captured. No lock is held in the common case. An integration
-test asserts that two concurrent captures produce exactly one `200` and one `409`.
+Capture, refund and settlement load the payment with `SELECT … FOR UPDATE` **before** calling the processor.
+Optimistic locking alone is not enough here: `@Version` detects a conflict only at commit, after both requests
+have already called the processor, and a rollback cannot take back a refund the processor has paid out. Two
+refunds racing on version 3 would both return money to the card while the database recorded one.
+
+With the row lock, a second request for the same payment waits for the first to commit, then validates against
+the new state: a second full refund sees `REFUNDED` and gets `409` without calling out, a partial refund sees
+the reduced refundable amount, and a refund arriving mid-settlement refunds a `SETTLED` payment instead of
+racing the worker. Requests for different payments never wait on each other. `@Version` stays as a backstop for
+any write path that does not take the lock.
+
+`ProcessorConcurrencyIntegrationTest` slows the processor down so requests genuinely overlap, then counts
+**processor calls**, not rows: two concurrent captures or full refunds call the processor once; two partial
+refunds that fit both succeed in turn; and a refund racing settlement never leaves a settlement the processor
+made but the audit trail does not show.
 
 ### 6.8 Graceful degradation and shutdown
 
@@ -961,7 +972,7 @@ Where the brief was open to interpretation, these are the calls that were made.
 | Offset pagination | Keyset / cursor | Page numbers in the UI, simple | Slower on deep pages, and rows can shift between pages. Switch to cursors at scale |
 | Trigram GIN index for substring search | Prefix-only `LIKE 'x%'` | Searching `913` finds `order-913447`, which is what users expect | A larger index and slower writes. Measured at 1.4ms vs 42.5ms on 200k rows, so worth it |
 | Token in `sessionStorage` | httpOnly cookie | No CSRF handling, simple | Readable by injected scripts (XSS). Mitigate with CSP, or move to an httpOnly cookie plus a CSRF token |
-| Optimistic locking (`@Version`) | Pessimistic row locks | No lock held in the common case | Rare conflicts return 409 and the client must re-read |
+| Row lock (`FOR UPDATE`) before any processor call, `@Version` as backstop | Optimistic locking only | The processor is never called twice for the same payment; concurrent partial refunds serialize instead of failing | A second request for the *same* payment waits up to the first one's processor call (bounded by the 3 s read timeout) |
 | Deterministic stub processor, with an optional WireMock HTTP mode | A real sandbox such as Stripe test mode | Offline, repeatable, every failure path testable — including timeouts and connection resets | Real network behaviour at scale is not exercised; a real client goes behind the same interface |
 | Flyway migrations with Hibernate set to `validate` | `ddl-auto: update` | The schema is reviewable, versioned and identical everywhere | Every change needs a migration file, including during development |
 

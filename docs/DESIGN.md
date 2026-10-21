@@ -24,7 +24,7 @@ dives into the non-functional requirements. Setup, operations and tradeoffs are 
 
 | Quality | Target and approach |
 |---|---|
-| Correctness | No double charge or refund: Idempotency-Key, state machine, optimistic locking, unique constraints |
+| Correctness | No double charge or refund: Idempotency-Key, state machine, row lock before every processor call, unique constraints |
 | Security | JWT with expiry, bcrypt, tenant isolation (404 for other merchants), no PAN or CVV stored or logged |
 | Auditability | Every transition recorded with actor, reason, correlation ID, time, in the same transaction |
 | Reliability | Async work cannot be lost (outbox); retry with backoff; dead-letter; crash recovery |
@@ -132,12 +132,15 @@ The key insert, the business operation and the stored response share one databas
   integration test firing 8 identical requests concurrently.
 - **Misuse** → the request fingerprint (SHA-256 of operation + body) must match; the same key with a different body
   is a client bug → 422.
-- **Defence in depth** → even without the key, the state machine plus `@Version` make a second capture fail with 409.
+- **Defence in depth** → even without the key, the state machine plus the row lock make a second capture fail
+  with 409 before it reaches the processor.
 
 ### 5.2 Consistency and concurrency
 
-- `@Version` on `Payment`: two concurrent captures with different keys → one commits, the other gets an optimistic
-  lock failure (or sees `CAPTURED` and fails the transition) → `409`. Verified by test.
+- Capture, refund and settlement take the payment's row lock (`SELECT … FOR UPDATE`) before calling the
+  processor, so two concurrent operations on one payment run in turn and the second sees the first's result
+  before it calls out. Two concurrent captures with different keys → one `200`, one `409`, **one processor
+  call**. Verified by tests that count processor invocations, not just rows. `@Version` remains as a backstop.
 - Status CHECK constraints in the schema back the Java state machine.
 - The transactional outbox removes the dual-write problem (DB plus message broker) entirely.
 

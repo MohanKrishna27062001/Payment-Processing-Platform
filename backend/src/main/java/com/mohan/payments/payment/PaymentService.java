@@ -3,6 +3,7 @@ package com.mohan.payments.payment;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -85,7 +86,7 @@ public class PaymentService {
 
     @Transactional
     public Payment capture(UUID merchantId, UUID paymentId) {
-        Payment payment = load(merchantId, paymentId);
+        Payment payment = loadForUpdate(merchantId, paymentId);
         requireStatus(payment, PaymentStatus.CAPTURED);
         processor.capture(payment.getProcessorReference(), payment.getAmountMinor());
         record(payment, payment.transitionTo(PaymentStatus.CAPTURED, Actor.merchant(merchantId),
@@ -100,11 +101,12 @@ public class PaymentService {
      * <p>
      * Both checks run before the processor is called: a payment that cannot be refunded at all, and an amount
      * larger than what is left. Asking the processor first and rejecting afterwards would risk money leaving
-     * while this transaction rolls back.
+     * while this transaction rolls back. The row lock makes those checks hold until commit: a concurrent refund
+     * waits here and then validates against the amount this one has already taken.
      */
     @Transactional
     public Payment refund(UUID merchantId, UUID paymentId, Long amountMinor) {
-        Payment payment = load(merchantId, paymentId);
+        Payment payment = loadForUpdate(merchantId, paymentId);
         PaymentStatus next = payment.getStatus() == PaymentStatus.PARTIALLY_REFUNDED
                 ? PaymentStatus.PARTIALLY_REFUNDED
                 : PaymentStatus.REFUNDED;
@@ -137,10 +139,23 @@ public class PaymentService {
     }
 
     private Payment load(UUID merchantId, UUID paymentId) {
-        Payment payment = payments.findByIdAndMerchantId(paymentId, merchantId)
+        return found(payments.findByIdAndMerchantId(paymentId, merchantId), paymentId);
+    }
+
+    /**
+     * For operations that call the processor: locks the payment row until commit, so two requests for the same
+     * payment run one after the other instead of both calling out on the same stale state. Requests for different
+     * payments never wait on each other.
+     */
+    private Payment loadForUpdate(UUID merchantId, UUID paymentId) {
+        return found(payments.findForUpdate(paymentId, merchantId), paymentId);
+    }
+
+    private static Payment found(Optional<Payment> payment, UUID paymentId) {
+        Payment result = payment
                 .orElseThrow(() -> ApiException.notFound("Payment " + paymentId + " was not found."));
         MDC.put(CorrelationIdFilter.PAYMENT_ID_MDC_KEY, paymentId.toString());
-        return payment;
+        return result;
     }
 
     /** Fails before calling the processor when the transition is impossible anyway. */

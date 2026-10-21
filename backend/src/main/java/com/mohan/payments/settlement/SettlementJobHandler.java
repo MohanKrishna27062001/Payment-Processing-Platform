@@ -44,7 +44,9 @@ public class SettlementJobHandler implements OutboxJobHandler {
 
     @Override
     public Outcome handle(OutboxJob job) {
-        Payment payment = payments.findById(job.getPaymentId())
+        // Locked, like capture and refund: a refund arriving mid-settlement waits, then refunds a SETTLED payment,
+        // instead of both calling the processor on the same CAPTURED state and one commit being lost.
+        Payment payment = payments.findByIdForUpdate(job.getPaymentId())
                 .orElseThrow(() -> new NonRetryableJobException("Payment " + job.getPaymentId() + " not found"));
 
         return switch (payment.getStatus()) {
