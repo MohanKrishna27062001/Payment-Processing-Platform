@@ -12,6 +12,40 @@ correctness (no double charges), a complete audit trail, and operability were ch
 | Processor | Deterministic in-process stub, or WireMock over HTTP |
 | Observability | Structured JSON logs (ECS), Micrometer/Prometheus metrics, Micrometer Tracing (W3C) |
 
+## Quick start (Docker)
+
+All you need is [Docker Desktop](https://www.docker.com/products/docker-desktop/), installed and running.
+Nothing is built on your machine: the app runs from images published on
+[Docker Hub](https://hub.docker.com/u/mohankrishna27), for Intel/AMD and Apple Silicon alike.
+
+**Step 1 — Get the project.** Clone it, or use **Code → Download ZIP** on this page and unzip it.
+
+```bash
+git clone https://github.com/MohanKrishna27062001/Payment-Processing-Platform.git
+```
+
+**Step 2 — Move into the project folder**, the one that contains `compose.hub.yaml`.
+
+```bash
+cd Payment-Processing-Platform
+```
+
+If you downloaded the ZIP, the folder is named `Payment-Processing-Platform-main` instead.
+
+**Step 3 — Start the application.**
+
+```bash
+docker compose -f compose.hub.yaml up -d
+```
+
+**Step 4 — Open http://localhost:5173** and sign in as `argyle@example.com` / `demo-password`.
+
+The first start takes a minute or two while the images download and the database is set up. To stop it, run
+`docker compose -f compose.hub.yaml down` from the same folder.
+
+To build the images from the source code instead of downloading them, run `docker compose up --build` in
+Step 3. More options, including the WireMock processor, are in [Setup instructions](#2-setup-instructions).
+
 ---
 
 ## Contents
@@ -112,7 +146,7 @@ you a clean slate.
 |---|---|
 | Dashboard | http://localhost:5173 |
 | API, Swagger UI, actuator | http://localhost:8080 |
-| PostgreSQL | `localhost:5432`, user/password/db all `payments` |
+| PostgreSQL | `localhost:5433`, user/password/db all `payments` (5433 so it never clashes with a local PostgreSQL on 5432) |
 
 nginx serves the built dashboard and proxies `/api` to the backend, so the browser talks to one origin and
 no CORS is involved — the same arrangement the Vite dev server provides.
@@ -122,6 +156,9 @@ To exercise the processor over real HTTP instead of the in-process stub:
 ```bash
 PROCESSOR_MODE=http docker compose --profile wiremock up --build
 ```
+
+On Windows PowerShell: `$env:PROCESSOR_MODE="http"; docker compose --profile wiremock up --build`. The same
+works with the published images: add `-f compose.hub.yaml` and drop `--build`.
 
 #### B. Embedded PostgreSQL — nothing installed but Java
 
@@ -1020,7 +1057,8 @@ What would change before this carried real money.
   updates over SSE instead of polling; bulk actions.
 - **Operations** — a Grafana dashboard checked into the repository, a dead-letter replay UI, and load tests that
   establish what the outbox throughput actually is.
-- **Delivery** — a full-stack `docker compose up`, and CI running the suite with Testcontainers on every push.
+- **Delivery** — CI that runs the suite with Testcontainers on every push and publishes the multi-architecture
+  images on each release; today they are built and pushed by hand.
 
 ---
 
