@@ -1,0 +1,91 @@
+# The whole stack. Nothing needs to be installed except Docker:
+#
+#     docker compose up --build
+#
+# Then open http://localhost:5173 and sign in as argyle@example.com / demo-password.
+#
+# The first build compiles the backend and the dashboard inside Docker, so it takes a few minutes and
+# needs network access for Maven and npm. Later runs reuse the layer cache.
+#
+# To run only the database and start the application from your IDE instead:
+#
+#     docker compose up -d postgres
+
+name: payments
+
+services:
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: payments
+      POSTGRES_USER: payments
+      POSTGRES_PASSWORD: payments
+    ports:
+      # Exposed so you can inspect the data with psql or a GUI. Remove this line to keep it internal.
+      # Host port 5433, not 5432, so it does not clash with a locally installed PostgreSQL; containers
+      # still reach it as postgres:5432. Override with POSTGRES_HOST_PORT.
+      - '${POSTGRES_HOST_PORT:-5433}:5432'
+    volumes:
+      # postgres 18+ keeps data in a version-named subdirectory, so the volume mounts one level up from
+      # the old /var/lib/postgresql/data; the image refuses to start with the old mount point.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      # The backend fails fast if the database is not accepting connections, so it must not start first.
+      test: ['CMD-SHELL', 'pg_isready -U payments -d payments']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # 'postgres' is the service name above; compose resolves it on the shared network.
+      DB_URL: jdbc:postgresql://postgres:5432/payments
+      DB_USERNAME: payments
+      DB_PASSWORD: payments
+      # Demo value. A real deployment supplies this from a secret manager; the application refuses to
+      # start if it is shorter than 32 bytes.
+      JWT_SECRET: docker-compose-demo-secret-change-me-0123456789
+      # The dashboard reaches the API through the nginx proxy on its own origin, so no browser origin
+      # ever calls the backend cross-site. Kept permissive for anyone hitting :8080 directly.
+      CORS_ALLOWED_ORIGINS: 'http://localhost:*,http://127.0.0.1:*'
+      # In-process stub by default. Switch to the WireMock service with: --profile wiremock
+      PROCESSOR_MODE: ${PROCESSOR_MODE:-stub}
+      PROCESSOR_URL: http://wiremock:8080
+    ports:
+      # Direct access for curl, Swagger UI at /swagger-ui.html, and /actuator.
+      - '8080:8080'
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      backend:
+        # Readiness includes the database, so by this point migrations have run and the seed is in.
+        condition: service_healthy
+    ports:
+      - '5173:80'
+
+  # Optional: the fake payment processor over real HTTP, so timeouts, 5xx and connection resets are
+  # exercised for real rather than thrown in-process.
+  #
+  #     PROCESSOR_MODE=http docker compose --profile wiremock up --build
+  #
+  # Behaviour lives in ./backend/stubs/mappings/*.json -- edit a file, no rebuild needed.
+  wiremock:
+    image: wiremock/wiremock:3.9.1
+    profiles: ['wiremock']
+    ports:
+      - '8089:8080'
+    volumes:
+      - './backend/stubs:/home/wiremock'
+    command: ['--global-response-templating', '--verbose']
+
+volumes:
+  postgres-data:

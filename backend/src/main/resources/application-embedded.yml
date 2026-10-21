@@ -1,0 +1,18 @@
+# Zero-install profile: the application starts its own PostgreSQL.
+#
+#   ./mvnw spring-boot:run -Dspring-boot.run.profiles=embedded     (Windows: .\run-embedded.cmd)
+#
+# Nothing needs to be installed and no Docker is required. The server is a real PostgreSQL, started from
+# binaries that arrive as ordinary Maven dependencies, in a temporary directory on a random port. The data
+# is discarded when the process exits, so every run starts from the migrations and the demo seed.
+#
+# Use it to review or demo the project. Use the normal configuration for anything you want to keep.
+app:
+  database:
+    embedded: true
+
+spring:
+  # The embedded server is created fresh each run, so there is never a compose container to start.
+  docker:
+    compose:
+      enabled: false

@@ -1,0 +1,8 @@
+target/
+*.log
+.mvn/wrapper/maven-wrapper.jar
+stubs/
+compose.yaml
+HELP.md
+run-local.*
+run-embedded.*

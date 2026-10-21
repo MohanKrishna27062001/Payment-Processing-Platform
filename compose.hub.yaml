@@ -1,0 +1,64 @@
+# Runs the published images from Docker Hub; no source code or build needed. Save this one file and run:
+#
+#     docker compose -f compose.hub.yaml up -d
+#
+# Then open http://localhost:5173 and sign in as argyle@example.com / demo-password.
+#
+# The fake processor runs in-process by default. To route processor calls through WireMock instead:
+#
+#     PROCESSOR_MODE=http docker compose -f compose.hub.yaml --profile wiremock up -d
+#
+# (PowerShell:  $env:PROCESSOR_MODE="http"; docker compose -f compose.hub.yaml --profile wiremock up -d)
+
+name: payments
+
+services:
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: payments
+      POSTGRES_USER: payments
+      POSTGRES_PASSWORD: payments
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U payments -d payments']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  backend:
+    image: mohankrishna27/payments-backend:${TAG:-latest}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/payments
+      DB_USERNAME: payments
+      DB_PASSWORD: payments
+      # Set your own: anyone who knows this value can mint valid login tokens.
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-value-of-32-plus-bytes}
+      PROCESSOR_MODE: ${PROCESSOR_MODE:-stub}
+      PROCESSOR_URL: http://wiremock:8080
+    ports:
+      - '8080:8080'
+
+  frontend:
+    # Its nginx proxies /api to the host name 'backend', so that service name must not change.
+    image: mohankrishna27/payments-frontend:${TAG:-latest}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - '5173:80'
+
+  wiremock:
+    image: mohankrishna27/payments-wiremock:${TAG:-latest}
+    profiles: ['wiremock']
+    ports:
+      - '8089:8080'
+
+volumes:
+  postgres-data:

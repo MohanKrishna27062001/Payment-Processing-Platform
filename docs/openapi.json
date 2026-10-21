@@ -1,0 +1,1010 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Payments API",
+    "version": "v1",
+    "description": "Merchant-facing payment API.\n\n**Money** is an integer in minor units: `1050` means 10.50, with a separate ISO 4217 `currency`.\n\n**Authentication**: `POST /api/v1/auth/login` returns a bearer token; every other endpoint requires\n`Authorization: Bearer <token>`. The merchant is always taken from the verified token, never from the\npath or body.\n\n**Idempotency**: create, capture and refund require an `Idempotency-Key` header. Retrying with the same\nkey replays the stored response rather than repeating the operation. Reusing a key for a different\nrequest is rejected with 422.\n\n**Errors** use RFC 7807 problem details with two extra members: a stable `code` and the request's\n`correlationId`.\n\n**Declines are not errors**: a refused card returns 201 with the payment in status FAILED. A processor\noutage returns 503 and stores nothing.\n"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "This instance"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "auth",
+      "description": "Login and current merchant"
+    },
+    {
+      "name": "payments",
+      "description": "Create, inspect, capture and refund payments"
+    }
+  ],
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Exchange email and password for an access token",
+        "description": "An unknown email and a wrong password return the identical response and take the same time, so\naccounts cannot be enumerated.\n",
+        "operationId": "login",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ValidationFailed"
+          },
+          "401": {
+            "description": "INVALID_CREDENTIALS",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "The merchant the current token belongs to",
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "The current merchant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MerchantProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/api/v1/payments": {
+      "post": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "Create and authorize a payment",
+        "description": "Authorization is synchronous, so the outcome is known by the time this returns.\n\nA **declined** card is a business outcome, not an error: the response is still `201` with\n`status: FAILED` and a `failureReason`. A **processor outage** is a transport error: `503`, and\nnothing is stored, so the same `Idempotency-Key` can be retried as a fresh attempt.\n",
+        "operationId": "createPayment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePaymentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Payment created; AUTHORIZED, or FAILED when the card was declined",
+            "headers": {
+              "Location": {
+                "description": "URI of the created payment",
+                "schema": {
+                  "type": "string",
+                  "format": "uri-reference"
+                }
+              },
+              "Idempotent-Replayed": {
+                "description": "Present and `true` when this is a replay of an earlier identical request",
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "503": {
+            "$ref": "#/components/responses/ProcessorUnavailable"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "List, search, filter and sort the merchant's payments",
+        "operationId": "listPayments",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Repeatable; matches any of the given statuses",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/PaymentStatus"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "Inclusive lower bound on `createdAt`, as an ISO-8601 instant",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Exclusive upper bound on `createdAt`, as an ISO-8601 instant",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "An exact payment id, or a case-insensitive substring of the merchant reference. Backed by a\ntrigram index, so `913` matches `order-913447`.\n",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "currency",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 3
+            }
+          },
+          {
+            "name": "minAmount",
+            "in": "query",
+            "description": "Minor units, inclusive",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "maxAmount",
+            "in": "query",
+            "description": "Minor units, inclusive",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "`<field>,<direction>`. Validated against an allowlist, so no user input ever reaches the query\nas an identifier. An unknown field gives `INVALID_SORT_FIELD`, an unknown direction\n`INVALID_SORT_DIRECTION`.\n",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 40,
+              "default": "createdAt,desc",
+              "enum": [
+                "createdAt,desc",
+                "createdAt,asc",
+                "amount,desc",
+                "amount,asc",
+                "status,desc",
+                "status,asc"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of payments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageResponsePaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          }
+        }
+      }
+    },
+    "/api/v1/payments/{paymentId}": {
+      "get": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "A payment with its full status history",
+        "description": "The `events` list is the append-only audit trail: one entry per transition, with the actor, the\nreason and the correlation id of the request that caused it.\n",
+        "operationId": "getPayment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PaymentId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The payment and its audit trail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/api/v1/payments/{paymentId}/capture": {
+      "post": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "Capture an authorized payment",
+        "description": "`AUTHORIZED → CAPTURED`. A settlement job is written to the outbox in the same transaction, so a\ncaptured payment can never exist without one.\n",
+        "operationId": "capturePayment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PaymentId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Captured",
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "Present and `true` when this is a replay of an earlier identical request",
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "503": {
+            "$ref": "#/components/responses/ProcessorUnavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/payments/{paymentId}/refund": {
+      "post": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "Refund a payment in full or in part",
+        "description": "The body is optional. `{\"amount\": 500}` returns 5.00; no body at all returns everything still\nrefundable. A partial refund leaves the payment `PARTIALLY_REFUNDED` and still settleable for the\nnet; refunding the remainder takes it to `REFUNDED`.\n\nAn amount larger than `refundableAmount` is rejected with `422 REFUND_AMOUNT_INVALID` **before**\nthe processor is called, and the database enforces the same invariant with a check constraint.\n\nThe amount is part of the idempotency fingerprint, so two different instalments need two different\nkeys, while retrying the *same* instalment replays instead of refunding twice.\n",
+        "operationId": "refundPayment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PaymentId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefundRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Refunded, fully or partially",
+            "headers": {
+              "Idempotent-Replayed": {
+                "description": "Present and `true` when this is a replay of an earlier identical request",
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          },
+          "503": {
+            "$ref": "#/components/responses/ProcessorUnavailable"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Access token from POST /api/v1/auth/login"
+      }
+    },
+    "parameters": {
+      "PaymentId": {
+        "name": "paymentId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "One key per logical operation, generated by the client and scoped to the merchant. Retrying with\nthe same key replays the stored response; reusing it for a *different* request body is rejected\nwith 422. Keys are retained for 24 hours.\n",
+        "schema": {
+          "type": "string",
+          "maxLength": 255
+        }
+      },
+      "RequestId": {
+        "name": "X-Request-Id",
+        "in": "header",
+        "required": false,
+        "description": "Becomes the `correlationId` on every log line, every audit event and every error response for this\nrequest — including the background settlement that happens seconds later. Generated if absent, and\nechoed back on the response.\n",
+        "schema": {
+          "type": "string",
+          "maxLength": 128
+        }
+      }
+    },
+    "responses": {
+      "ValidationFailed": {
+        "description": "VALIDATION_FAILED",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetail"
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "`VALIDATION_FAILED` (with `errors[]` per field), `IDEMPOTENCY_KEY_REQUIRED`,\n`INVALID_IDEMPOTENCY_KEY`, `RAW_CARD_DATA_REJECTED`, `INVALID_SORT_FIELD`, `INVALID_SORT_DIRECTION`\n",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetail"
+            }
+          }
+        }
+      },
+      "Unauthenticated": {
+        "description": "`UNAUTHENTICATED` (no token) or `INVALID_TOKEN` (bad signature, or expired)",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetail"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "`NOT_FOUND`. Also returned for another merchant's payment, so its existence is not leaked.\n",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetail"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "`INVALID_STATE_TRANSITION`, `CONCURRENT_MODIFICATION` (optimistic lock lost; re-read and retry),\nor `IDEMPOTENCY_REQUEST_IN_PROGRESS` (an identical request is still running)\n",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetail"
+            }
+          }
+        }
+      },
+      "Unprocessable": {
+        "description": "`IDEMPOTENCY_KEY_REUSED` (same key, different body), `REFUND_AMOUNT_INVALID`, `PROCESSOR_REJECTED`\n",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetail"
+            }
+          }
+        }
+      },
+      "ProcessorUnavailable": {
+        "description": "`PROCESSOR_UNAVAILABLE`. Nothing was stored, so retrying with the **same** `Idempotency-Key` is\nsafe and is treated as a fresh attempt.\n",
+        "headers": {
+          "Retry-After": {
+            "description": "Seconds to wait before retrying",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ProblemDetail"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "PaymentStatus": {
+        "type": "string",
+        "description": "`PENDING → AUTHORIZED → CAPTURED → SETTLED`, with `PARTIALLY_REFUNDED` repeatable and still\nsettleable for the net. `FAILED` and `REFUNDED` are terminal.\n",
+        "enum": [
+          "PENDING",
+          "AUTHORIZED",
+          "CAPTURED",
+          "SETTLED",
+          "FAILED",
+          "PARTIALLY_REFUNDED",
+          "REFUNDED"
+        ]
+      },
+      "PaymentMethod": {
+        "type": "object",
+        "description": "A processor token representing the card. Raw card numbers are rejected.",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "examples": [
+              "tok_visa"
+            ]
+          }
+        }
+      },
+      "CreatePaymentRequest": {
+        "type": "object",
+        "required": [
+          "amount",
+          "currency",
+          "paymentMethod"
+        ],
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1,
+            "maximum": 100000000,
+            "description": "Minor units: 1050 means 10.50",
+            "examples": [
+              2500
+            ]
+          },
+          "currency": {
+            "type": "string",
+            "pattern": "[A-Z]{3}",
+            "description": "ISO 4217 code such as USD",
+            "examples": [
+              "USD"
+            ]
+          },
+          "merchantReference": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 100,
+            "description": "Merchant-supplied and deliberately **not** unique: one order can legitimately have several\npayments. Duplicate charges are prevented by the Idempotency-Key, which is a different thing.\n",
+            "examples": [
+              "order-481207"
+            ]
+          },
+          "paymentMethod": {
+            "$ref": "#/components/schemas/PaymentMethod"
+          }
+        }
+      },
+      "RefundRequest": {
+        "type": "object",
+        "description": "Omit the body entirely, or leave `amount` null, to refund everything still refundable.",
+        "properties": {
+          "amount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 1,
+            "maximum": 100000000,
+            "description": "Minor units. Must not exceed `refundableAmount`.",
+            "examples": [
+              1000
+            ]
+          }
+        }
+      },
+      "CardSummary": {
+        "type": "object",
+        "description": "The only card data stored. There is never a PAN or CVV.",
+        "properties": {
+          "brand": {
+            "type": "string",
+            "examples": [
+              "VISA"
+            ]
+          },
+          "last4": {
+            "type": "string",
+            "examples": [
+              "4242"
+            ]
+          }
+        }
+      },
+      "PaymentResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PaymentStatus"
+          },
+          "amount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Minor units"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "merchantReference": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "card": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CardSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "processorReference": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The processor's own identifier for this payment"
+          },
+          "failureReason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Set only when status is FAILED, e.g. `insufficient_funds`, `exceeds_limit`"
+          },
+          "refundedAmount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Minor units already returned"
+          },
+          "refundableAmount": {
+            "type": "integer",
+            "format": "int64",
+            "description": "`amount` minus `refundedAmount`; the largest refund still accepted"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PaymentEventResponse": {
+        "type": "object",
+        "description": "One entry in the append-only audit trail.",
+        "properties": {
+          "fromStatus": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PaymentStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null on the first event, where the payment came into existence"
+          },
+          "toStatus": {
+            "$ref": "#/components/schemas/PaymentStatus"
+          },
+          "actorType": {
+            "type": "string",
+            "enum": [
+              "MERCHANT",
+              "SYSTEM"
+            ]
+          },
+          "actorId": {
+            "type": "string",
+            "description": "The merchant id, or a system component such as `settlement-worker`"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "captured_by_merchant"
+            ]
+          },
+          "correlationId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Ties this transition back to the request that caused it"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PaymentDetailResponse": {
+        "type": "object",
+        "properties": {
+          "payment": {
+            "$ref": "#/components/schemas/PaymentResponse"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentEventResponse"
+            }
+          }
+        }
+      },
+      "PageResponsePaymentResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaymentResponse"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalItems": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totalPages": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 320,
+            "examples": [
+              "argyle@example.com"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "examples": [
+              "demo-password"
+            ]
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "description": "HS256 JWT. Send as `Authorization: Bearer <token>`."
+          },
+          "tokenType": {
+            "type": "string",
+            "examples": [
+              "Bearer"
+            ]
+          },
+          "expiresIn": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Seconds until expiry"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "merchant": {
+            "$ref": "#/components/schemas/MerchantProfile"
+          }
+        }
+      },
+      "MerchantProfile": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        }
+      },
+      "FieldError": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ProblemDetail": {
+        "type": "object",
+        "description": "RFC 7807, with two members added to every error: a stable machine-readable `code` and the\nrequest's `correlationId`. Request values are never echoed back, so card data and secrets cannot\nleak through an error message.\n",
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri",
+            "examples": [
+              "https://payments.example.com/errors/invalid-state-transition"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "examples": [
+              "Invalid state transition"
+            ]
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "examples": [
+              409
+            ]
+          },
+          "detail": {
+            "type": "string",
+            "examples": [
+              "Payment 9f1c… cannot move from SETTLED to CAPTURED."
+            ]
+          },
+          "instance": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri-reference"
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable identifier to branch on; safe to depend upon",
+            "examples": [
+              "INVALID_STATE_TRANSITION"
+            ]
+          },
+          "correlationId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Matches the `X-Request-Id` sent, or the one generated for this request"
+          },
+          "errors": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "description": "Present on VALIDATION_FAILED, one entry per rejected field",
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            }
+          }
+        }
+      }
+    }
+  }
+}

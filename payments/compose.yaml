@@ -1,9 +1,0 @@
-services:
-  postgres:
-    image: 'postgres:18'
-    environment:
-      - 'POSTGRES_DB=payments'
-      - 'POSTGRES_USER=payments'
-      - 'POSTGRES_PASSWORD=payments'
-    ports:
-      - '5432:5432'

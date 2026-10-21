@@ -1,0 +1,76 @@
+{
+  "mappings": [
+    {
+      "name": "capture: first attempt is slow (trips the read timeout) - proc_once_*",
+      "priority": 2,
+      "scenarioName": "capture-once",
+      "requiredScenarioState": "Started",
+      "newScenarioState": "captured",
+      "request": {
+        "method": "POST",
+        "urlPathPattern": "/processor/v1/authorizations/proc_once_[^/]+/capture"
+      },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 8000,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "captured": true }
+      }
+    },
+
+    {
+      "name": "capture: repeat attempt is rejected - proc_once_*",
+      "priority": 2,
+      "scenarioName": "capture-once",
+      "requiredScenarioState": "captured",
+      "request": {
+        "method": "POST",
+        "urlPathPattern": "/processor/v1/authorizations/proc_once_[^/]+/capture"
+      },
+      "response": {
+        "status": 409,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "error": "already_captured" }
+      }
+    },
+
+    {
+      "name": "capture: authorization has expired - proc_expired_*",
+      "priority": 2,
+      "request": {
+        "method": "POST",
+        "urlPathPattern": "/processor/v1/authorizations/proc_expired_[^/]+/capture"
+      },
+      "response": {
+        "status": 409,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "error": "authorization_expired" }
+      }
+    },
+
+    {
+      "name": "capture: connection reset - proc_capterr_*",
+      "priority": 2,
+      "request": {
+        "method": "POST",
+        "urlPathPattern": "/processor/v1/authorizations/proc_capterr_[^/]+/capture"
+      },
+      "response": { "fault": "CONNECTION_RESET_BY_PEER" }
+    },
+
+    {
+      "name": "capture: success (catch-all)",
+      "priority": 10,
+      "request": {
+        "method": "POST",
+        "urlPathPattern": "/processor/v1/authorizations/[^/]+/capture"
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "transformers": ["response-template"],
+        "jsonBody": { "captured": true, "capturedAmountMinor": "{{jsonPath request.body '$.amountMinor'}}" }
+      }
+    }
+  ]
+}

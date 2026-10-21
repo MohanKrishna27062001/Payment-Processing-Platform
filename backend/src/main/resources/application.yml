@@ -1,0 +1,131 @@
+spring:
+  application:
+    name: payments
+
+  # Database connection. Defaults target a local PostgreSQL; override with env vars in other environments.
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/payments}
+    username: ${DB_USERNAME:payments}
+    password: ${DB_PASSWORD:payments}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      connection-timeout: 5000   # ms: fail fast instead of piling up requests when the pool is exhausted
+
+  jpa:
+    open-in-view: false        # no lazy-loading from controllers; transactions end in the service layer
+    hibernate:
+      ddl-auto: validate       # Flyway owns the schema; Hibernate only checks entities match it
+
+  flyway:
+    # db/seed holds demo merchants for local runs. Drop it from this list in production.
+    locations: classpath:db/migration,classpath:db/seed
+
+  # Off by default so the app runs on machines without Docker (local PostgreSQL).
+  # Set DOCKER_COMPOSE_ENABLED=true to have Spring start compose.yaml automatically.
+  docker:
+    compose:
+      enabled: ${DOCKER_COMPOSE_ENABLED:false}
+      lifecycle-management: start-only
+
+  task:
+    scheduling:
+      pool:
+        size: 4
+      shutdown:
+        await-termination: true          # let an in-flight outbox batch finish on shutdown
+        await-termination-period: 20s
+
+server:
+  port: ${PORT:8080}
+  shutdown: graceful           # finish in-flight requests before stopping
+
+app:
+  security:
+    jwt:
+      # Local-development default only. Production must supply JWT_SECRET (32+ random bytes) from a secret store.
+      secret: ${JWT_SECRET:local-dev-only-secret-change-me-0123456789}
+      issuer: payments-api
+      ttl: ${JWT_TTL:15m}
+    operator:
+      # HTTP Basic login for /actuator/outbox and /actuator/metrics. Merchant tokens are never accepted there.
+      # No password by default, which locks those endpoints for everyone until OPS_PASSWORD is set.
+      username: ${OPS_USERNAME:ops}
+      password: ${OPS_PASSWORD:}
+    cors:
+      # Any local port in development; set CORS_ALLOWED_ORIGINS to the exact dashboard origin in production.
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:*,http://127.0.0.1:*}
+  processor:
+    # 'stub' uses the in-process StubPaymentProcessor (no network, the default so nothing changes by accident).
+    # 'http' uses HttpPaymentProcessorClient, which calls base-url - the WireMock stub locally, the real
+    # processor in production:  PROCESSOR_MODE=http docker compose -f backend/compose.yaml up -d wiremock
+    mode: ${PROCESSOR_MODE:stub}
+    base-url: ${PROCESSOR_URL:http://localhost:8089}
+    connect-timeout: 1s
+    # Kept short on purpose: the processor call happens inside a database transaction, so this is exactly how
+    # long one slow response can hold a connection from a pool of 10.
+    read-timeout: 3s
+  idempotency:
+    ttl: 24h
+  outbox:
+    settlement-delay: ${SETTLEMENT_DELAY:10s}   # simulates the processor's settlement batch cut-off
+    batch-size: 20
+    max-attempts: 5
+    initial-backoff: 2s
+    max-backoff: 5m
+    stuck-after: 5m
+    retention: ${OUTBOX_RETENTION:P7D}   # DONE jobs older than this are purged hourly; DEAD jobs are kept
+    lag-warning: 2m
+    poll-interval: PT2S
+
+springdoc:
+  api-docs:
+    # Turn both off in production (SPRINGDOC_ENABLED=false): the schema is useful to publish, the live UI
+    # on a public port usually is not.
+    enabled: ${SPRINGDOC_ENABLED:true}
+  swagger-ui:
+    enabled: ${SPRINGDOC_ENABLED:true}
+    operations-sorter: method
+    tags-sorter: alpha
+
+management:
+  server:
+    # Same port as the API by default so local runs need nothing. In production set MANAGEMENT_PORT to a port
+    # that is not exposed to the internet, so /actuator (metrics, dead letters, replay) stays operator-only.
+    port: ${MANAGEMENT_PORT:${PORT:8080}}
+  otlp:
+    metrics:
+      export:
+        # Push the same meters to an OpenTelemetry Collector. Off by default; nothing is sent until enabled.
+        enabled: ${OTLP_METRICS_ENABLED:false}
+        url: ${OTLP_METRICS_URL:http://localhost:4318/v1/metrics}
+        step: 30s
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,outbox   # 'outbox' lists dead letters and can requeue one
+  endpoint:
+    health:
+      probes:
+        enabled: true          # /actuator/health/liveness and /actuator/health/readiness
+      show-details: always     # local demo; use when-authorized in production
+      group:
+        readiness:
+          include: readinessState,db   # not ready to take traffic if the database is unreachable
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true      # latency histograms for p95/p99 (the "D" in RED)
+    tags:
+      application: ${spring.application.name}
+  tracing:
+    sampling:
+      probability: 1.0         # sample everything locally; ~0.1 in production
+    propagation:
+      type: w3c
+
+logging:
+  structured:
+    format:
+      console: ecs             # JSON logs (Elastic Common Schema) to stdout; MDC and key/value pairs included
+  level:
+    com.mohan.payments: INFO

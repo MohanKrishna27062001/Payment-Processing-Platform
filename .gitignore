@@ -11,6 +11,9 @@ Thumbs.db
 node_modules/
 dist/
 
+# Logs from local runs (e.g. backend/run-local.log)
+*.log
+
 # Local env files
 .env
 .env.*

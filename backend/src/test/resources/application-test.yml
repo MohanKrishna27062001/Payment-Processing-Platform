@@ -1,0 +1,23 @@
+spring:
+  flyway:
+    locations: classpath:db/migration   # no demo seed data; tests create their own merchants
+
+app:
+  security:
+    operator:
+      username: ops
+      password: test-operator-password
+  outbox:
+    worker:
+      enabled: false        # tests drive OutboxWorker directly for deterministic results
+    settlement-delay: 0s
+    initial-backoff: 0s
+    max-backoff: 0s
+    max-attempts: 3
+  metrics:
+    refresh-interval: PT1H
+
+logging:
+  level:
+    root: WARN
+    com.mohan.payments: WARN

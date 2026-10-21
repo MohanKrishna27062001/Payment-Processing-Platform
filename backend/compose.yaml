@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: 'postgres:18'
+    environment:
+      - 'POSTGRES_DB=payments'
+      - 'POSTGRES_USER=payments'
+      - 'POSTGRES_PASSWORD=payments'
+    ports:
+      - '5432:5432'
+
+  # Fake payment processor. Behaviour lives in ./stubs/mappings/*.json - edit a file, no rebuild needed.
+  # Admin API on the same port: http://localhost:8089/__admin/requests shows every call the app made,
+  # and POST http://localhost:8089/__admin/scenarios/reset rewinds the stateful scenarios.
+  wiremock:
+    image: 'wiremock/wiremock:3.9.1'
+    ports:
+      - '8089:8080'
+    volumes:
+      - './stubs:/home/wiremock'
+    command:
+      - '--global-response-templating'
+      - '--verbose'

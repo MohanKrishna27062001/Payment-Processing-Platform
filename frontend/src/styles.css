@@ -1,0 +1,474 @@
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --border: #e3e6eb;
+  --text: #1b1f24;
+  --muted: #667085;
+  --primary: #3a5bd9;
+  --primary-hover: #2f4bc0;
+  --danger: #c4372f;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+
+  --pending-bg: #eef1f5;   --pending-fg: #475467;
+  --authorized-bg: #e8efff; --authorized-fg: #2f4bc0;
+  --captured-bg: #fff4e0;  --captured-fg: #9a5b00;
+  --settled-bg: #e3f6ea;   --settled-fg: #1d7a43;
+  --failed-bg: #fde8e7;    --failed-fg: #b42318;
+  --refunded-bg: #f1eafd;  --refunded-fg: #6b3fc4;
+
+  color-scheme: light;
+  --font-ui: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Accent face for field names and column headings. 'RocheSans' first so a locally installed copy wins
+     with no change here; Manrope (loaded in index.html) is the fallback that everyone actually sees.
+     To switch the whole dashboard to another face, change this one line and the <link> in index.html. */
+  --font-accent: 'RocheSans', 'Roche Sans', Manrope, var(--font-ui);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1216;
+    --surface: #171b21;
+    --border: #2a3039;
+    --text: #e7eaee;
+    --muted: #98a2b3;
+    --primary: #6d8bff;
+    --primary-hover: #8aa1ff;
+    --danger: #f0716a;
+    --shadow: none;
+    --pending-bg: #252b34;   --pending-fg: #c3cad5;
+    --authorized-bg: #1d2a4d; --authorized-fg: #a9bbff;
+    --captured-bg: #3a2c12;  --captured-fg: #f3c06b;
+    --settled-bg: #12331f;   --settled-fg: #7bd8a0;
+    --failed-bg: #3b1715;    --failed-fg: #f7a19b;
+    --refunded-bg: #2b1f45;  --refunded-fg: #c9b1ff;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); }
+h1 { font-size: 1.5rem; margin: 0; }
+h2 { font-size: 1rem; margin: 0; }
+code { font-family: ui-monospace, 'Cascadia Code', Menlo, monospace; font-size: 0.85em; }
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+.text-danger { color: var(--danger); }
+
+.shell { min-height: 100vh; }
+.topbar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 1;
+}
+.brand { font-weight: 700; color: var(--text); display: inline-flex; align-items: center; gap: 8px; }
+.brand:hover { text-decoration: none; }
+.brand-mark { color: var(--primary); }
+.brand-large { font-size: 1.25rem; }
+.content { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+
+/* Account menu: the avatar is the only control in the bar, and who is signed in, how long the session has
+   left and Log out all live in the panel underneath it. */
+.profile { position: relative; }
+.avatar-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 3px;
+  background: transparent; border: 1px solid transparent; border-radius: 999px; cursor: pointer;
+  font: inherit; color: var(--text); transition: background 0.15s, border-color 0.15s;
+}
+.avatar-btn:hover, .avatar-btn[aria-expanded='true'] { background: var(--bg); border-color: var(--border); }
+.avatar-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.avatar {
+  display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+  background: var(--primary); color: #fff; font-family: var(--font-accent);
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.02em; flex: none;
+}
+.avatar-lg { width: 40px; height: 40px; font-size: 0.9rem; }
+.avatar-caret { color: var(--muted); font-size: 0.7rem; }
+
+.profile-menu {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 20; min-width: 230px;
+  display: flex; flex-direction: column; padding: 6px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.14);
+}
+.profile-head { display: flex; align-items: center; gap: 10px; padding: 8px 10px 10px; }
+.profile-id { display: flex; flex-direction: column; min-width: 0; }
+.profile-id strong { font-size: 0.95rem; overflow-wrap: anywhere; }
+.profile-id small { font-size: 0.8rem; }
+.profile-sep { height: 1px; background: var(--border); margin: 2px 4px 6px; }
+.profile-item {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 9px 10px;
+  font: inherit; font-weight: 600; text-align: left; background: transparent; border: 0;
+  border-radius: 8px; cursor: pointer; color: var(--text);
+}
+.profile-item:hover { background: var(--bg); }
+.profile-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.profile-danger { color: var(--danger); }
+.profile-danger:hover { background: var(--failed-bg); }
+
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.page-title { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.page-title p { margin: 4px 0 0; }
+.back { font-size: 0.9rem; }
+.amount-title { display: flex; align-items: center; gap: 12px; font-size: 1.9rem; }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+
+.btn {
+  font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 8px; border: 1px solid transparent;
+  cursor: pointer; transition: background 0.15s, border-color 0.15s;
+}
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+.btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+.btn-danger:hover:not(:disabled) { background: var(--failed-bg); }
+.btn-ghost { background: transparent; color: var(--text); border-color: var(--border); }
+.btn-ghost:hover:not(:disabled) { border-color: var(--muted); }
+
+label { display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+input, select {
+  font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 0 10px; min-width: 0;
+  /* One height for every control, so an input, a select, a date picker and the status button all sit on the
+     same two lines instead of each taking whatever height its native widget wants. */
+  height: 38px;
+}
+input[type='checkbox'] { height: auto; accent-color: var(--primary); }
+input:focus, select:focus, .btn:focus-visible, .chip:focus-visible, tr.clickable:focus-visible {
+  outline: 2px solid var(--primary); outline-offset: 1px;
+}
+input[aria-invalid='true'] { border-color: var(--danger); }
+
+/* Both forms are a grid rather than wrapping flex: every field is one column wide (two for the long ones),
+   so the gaps between them are identical and the labels line up across rows whatever the viewport. */
+.filters, .create-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.span-2 { grid-column: span 2; }
+.field-label-only { display: block; }
+
+/* Field names: the accent face, heavier and tracked out, so the eye finds the labels before the values. */
+.field-label {
+  font-family: var(--font-accent);
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.045em; text-transform: uppercase;
+  color: var(--text);
+}
+/* Date fields keep the plain label — the native picker is already a busy control. */
+.field-label-plain {
+  font-family: var(--font-ui);
+  font-size: 0.85rem; font-weight: 600; letter-spacing: normal; text-transform: none;
+  color: var(--muted);
+}
+.field-error { font-size: 0.8rem; font-weight: 500; color: var(--danger); }
+
+/* The action row sits on its own line at the right, clear of the fields above it. */
+.filters .filter-actions, .create-form .filter-actions {
+  grid-column: 1 / -1; justify-content: flex-end; margin-top: 4px;
+}
+
+/* Multi-select: one labelled control for a whole set of values, closed by default. */
+.picker { position: relative; }
+.picker-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%; height: 38px; padding: 0 10px;
+  font: inherit; text-align: left; cursor: pointer; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+}
+.picker-btn:hover { border-color: var(--muted); }
+.picker-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.picker-btn-on { border-color: var(--primary); }
+.picker-summary { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker-count {
+  flex: none; min-width: 20px; padding: 1px 6px; border-radius: 999px; text-align: center;
+  background: var(--primary); color: #fff; font-size: 0.72rem; font-weight: 700;
+}
+.picker-caret { flex: none; color: var(--muted); font-size: 0.7rem; }
+.picker-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 100%; width: max-content;
+  max-height: 300px; overflow-y: auto; padding: 6px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 10px 28px rgba(16, 24, 40, 0.14);
+}
+.picker-option {
+  display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 6px 8px;
+  border-radius: 6px; cursor: pointer; font-weight: 500;
+}
+.picker-option:hover { background: var(--bg); }
+.picker-foot {
+  display: flex; justify-content: space-between; gap: 8px;
+  margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--border);
+}
+.link-btn {
+  font: inherit; font-size: 0.82rem; font-weight: 600; padding: 2px 6px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--primary); cursor: pointer;
+}
+.link-btn:disabled { color: var(--muted); cursor: not-allowed; }
+.link-btn:not(:disabled):hover { text-decoration: underline; }
+
+.chip {
+  font: inherit; font-size: 0.8rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border); background: transparent; color: var(--muted);
+}
+.chip-on { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+.table-wrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; }
+.table th { text-align: left; font-family: var(--font-accent); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.045em; color: var(--text); font-weight: 700; padding: 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.table td { padding: 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.table .num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: color-mix(in srgb, var(--primary) 6%, transparent); }
+.pagination { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; flex-wrap: wrap; gap: 8px; }
+.empty { text-align: center; color: var(--muted); padding: 32px 0; }
+
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.03em; vertical-align: middle; }
+.badge-pending { background: var(--pending-bg); color: var(--pending-fg); }
+.badge-authorized { background: var(--authorized-bg); color: var(--authorized-fg); }
+.badge-captured { background: var(--captured-bg); color: var(--captured-fg); }
+.badge-settled { background: var(--settled-bg); color: var(--settled-fg); }
+.badge-failed { background: var(--failed-bg); color: var(--failed-fg); }
+.badge-refunded { background: var(--refunded-bg); color: var(--refunded-fg); }
+
+.banner { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 8px; font-size: 0.9rem; margin-bottom: 8px; }
+.banner ul { margin: 4px 0 0; padding-left: 18px; }
+.banner-error { background: var(--failed-bg); color: var(--failed-fg); }
+.banner-info { background: var(--authorized-bg); color: var(--authorized-fg); }
+
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; align-items: start; }
+.details { display: grid; grid-template-columns: max-content 1fr; gap: 10px 20px; margin: 0; align-items: baseline; }
+.details dt {
+  font-family: var(--font-accent); font-size: 0.74rem; font-weight: 700;
+  letter-spacing: 0.045em; text-transform: uppercase; color: var(--text);
+}
+.details dd { margin: 0; overflow-wrap: anywhere; }
+
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline-item { display: grid; grid-template-columns: 16px 1fr; gap: 10px; padding-bottom: 16px; position: relative; }
+.timeline-item:not(:last-child)::before { content: ''; position: absolute; left: 5px; top: 14px; bottom: 0; width: 2px; background: var(--border); }
+.timeline-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--primary); margin-top: 4px; }
+.timeline-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.timeline-meta { font-size: 0.82rem; margin-top: 2px; overflow-wrap: anywhere; }
+.arrow { color: var(--muted); }
+
+.spinner { display: inline-flex; align-items: center; gap: 8px; color: inherit; }
+.spinner-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.login-page { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.login-card { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; box-shadow: var(--shadow); }
+.login-card h1 { font-size: 1.2rem; }
+
+@media (max-width: 640px) {
+  .topbar { padding: 10px 16px; }
+  /* Two columns at phone width keeps the pairs (From/To, Min/Max) side by side instead of stacking into
+     one very long column. */
+  .filters, .create-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .span-2 { grid-column: 1 / -1; }
+  .filter-actions { width: 100%; justify-content: flex-end; }
+  .amount-title { font-size: 1.5rem; }
+  .profile-menu { min-width: 210px; }
+}
+
+/* Sortable table headers: the whole header is the control, so the hit area matches what it looks like. */
+.table th button.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.table th.num button.sort-btn { justify-content: flex-end; }
+.table th button.sort-btn:hover { text-decoration: underline; }
+.table th button.sort-btn:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.sort-off { opacity: 0.35; }
+.sort-on { opacity: 0.9; }
+
+/* Refund: an amount box beside the button. Empty means "everything still refundable". */
+.refund-control { gap: 0.4rem; align-items: center; }
+.refund-amount { width: 7rem; text-align: right; }
+.badge-partially_refunded { background: var(--refunded-bg); color: var(--refunded-fg); }
+
+/* ===========================================================================
+   Layout and polish pass.
+   Appended deliberately: these rules restate a few properties set earlier in
+   the file, and at equal specificity the last declaration wins, so this block
+   is the one place to look for the current form layout.
+   =========================================================================== */
+
+/* --- Forms: fixed column counts -------------------------------------------
+   auto-fit decides for itself how many columns fit and wraps wherever it
+   lands, which is what pushed Test card onto its own line and stranded Max
+   amount next to Status. These counts are explicit, so the rows are the rows.
+   The weights are not equal: "Visa ---- 4242 (approves)" needs far more room
+   than "USD", and equal columns would clip one field while padding another. */
+.create-form {
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 0.7fr) minmax(0, 1.3fr) minmax(0, 1.5fr);
+  gap: 18px 20px;
+}
+.filters {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 0.8fr);
+  gap: 18px 20px;
+}
+/* Status sits alone on the second line; left to itself it would stretch across
+   the whole first column, which it has no use for. */
+.filters .status-field { max-width: 240px; }
+/* span-2 is no longer used by either form, but keep it honest if it returns. */
+.create-form .span-2, .filters .span-2 { grid-column: span 2; }
+
+/* The action row is separated from the fields rather than floating after them. */
+.filters .filter-actions, .create-form .filter-actions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  margin-top: 2px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 1080px) {
+  .create-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .filters .status-field { max-width: none; }
+}
+@media (max-width: 680px) {
+  .create-form, .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .create-form .span-2, .filters .span-2 { grid-column: 1 / -1; }
+}
+
+/* --- Controls -------------------------------------------------------------
+   One height for every control and one focus treatment, so a row of inputs,
+   selects, date pickers and the status button reads as a single row. */
+input, select, .picker-btn, .btn {
+  height: 40px;
+  border-radius: 9px;
+}
+input, select, .picker-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+input:hover:not(:disabled), select:hover, .picker-btn:hover { border-color: var(--muted); }
+input:focus, select:focus, .picker-btn:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+input[aria-invalid='true']:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 18%, transparent);
+}
+input[type='checkbox'] { height: auto; box-shadow: none; }
+input::placeholder { color: color-mix(in srgb, var(--muted) 72%, transparent); }
+
+/* Labels: the same size and rhythm everywhere, dates included — the accent
+   face is what sets them apart, not a different size. */
+.field { gap: 7px; }
+.field-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.07em;
+  line-height: 1.4;
+}
+.field-label-plain {
+  font-size: 0.72rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* --- Surfaces -------------------------------------------------------------- */
+.card {
+  border-radius: 14px;
+  padding: 20px 22px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.04);
+}
+.card-header { margin-bottom: 16px; }
+.card h2 { font-size: 1.02rem; letter-spacing: -0.01em; }
+.stack { gap: 20px; }
+
+.btn { padding: 0 16px; border-radius: 9px; }
+.btn-primary { box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1); }
+
+/* Table: a tinted header strip, so the column names read as a band rather than
+   as the first row of data. */
+.table thead th {
+  background: color-mix(in srgb, var(--muted) 7%, transparent);
+  padding: 11px 12px;
+}
+.table thead th:first-child { border-top-left-radius: 9px; border-bottom-left-radius: 9px; }
+.table thead th:last-child { border-top-right-radius: 9px; border-bottom-right-radius: 9px; }
+.table td { padding: 12px; }
+
+/* The settlement note is a footnote, not body text. */
+/* The action row above already draws a rule; a second one here is just noise. */
+.create-form ~ p.muted.small {
+  margin: 16px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+/* ===========================================================================
+   Attribute typography.
+   One face, one size, one weight for every attribute NAME on the page --
+   form labels, table column headers and the detail-page term list -- and
+   normal weight for every VALUE underneath them.
+   =========================================================================== */
+
+:root {
+  --label-size: 0.74rem;
+  --label-tracking: 0.07em;
+}
+
+/* The sort buttons have to be named explicitly. Chrome's user-agent stylesheet
+   sets `text-transform: none` on form controls, so a <button> inside a <th>
+   silently dropped the uppercase its parent had -- which is why Created,
+   Amount and Status read as a different font from REFERENCE, CARD and ID. */
+.field-label,
+.field-label-plain,
+.table th,
+.table th button.sort-btn,
+.details dt {
+  font-family: var(--font-accent);
+  font-size: var(--label-size);
+  font-weight: 700;
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--text);
+  line-height: 1.4;
+}
+/* To put every label on this page in a serif instead, change --font-accent
+   at the top of this file; nothing else needs touching. */
+
+/* Values are not labels. `label { font-weight: 600 }` was reaching every input
+   and select through `font: inherit`, which is why USD, the merchant reference
+   and the card option all rendered bold. */
+input, select, textarea, option,
+.picker-btn, .picker-summary, .picker-option {
+  font-family: var(--font-ui);
+  font-weight: 400;
+}
+
+/* A date input has no placeholder to style, and colouring it unconditionally
+   would grey a real date too -- so the class is driven by the value. */
+input[type='date'].date-empty,
+input[type='date'].date-empty::-webkit-datetime-edit {
+  color: var(--muted);
+}

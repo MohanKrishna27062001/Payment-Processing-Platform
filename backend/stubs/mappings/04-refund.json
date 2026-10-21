@@ -1,0 +1,18 @@
+{
+  "mappings": [
+    {
+      "name": "refund: success (catch-all)",
+      "priority": 10,
+      "request": {
+        "method": "POST",
+        "urlPathPattern": "/processor/v1/authorizations/[^/]+/refund"
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "transformers": ["response-template"],
+        "jsonBody": { "refunded": true, "refundedAmountMinor": "{{jsonPath request.body '$.amountMinor'}}" }
+      }
+    }
+  ]
+}

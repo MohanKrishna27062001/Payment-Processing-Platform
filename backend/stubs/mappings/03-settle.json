@@ -1,0 +1,81 @@
+{
+  "mappings": [
+    {
+      "name": "settle: fails twice, then succeeds - proc_flaky_* (shows retry + backoff)",
+      "priority": 2,
+      "scenarioName": "settle-flaky",
+      "requiredScenarioState": "Started",
+      "newScenarioState": "failed-once",
+      "request": {
+        "method": "POST",
+        "urlPathPattern": "/processor/v1/authorizations/proc_flaky_[^/]+/settle"
+      },
+      "response": {
+        "status": 503,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "error": "settlement_timeout", "attempt": 1 }
+      }
+    },
+
+    {
+      "name": "settle: second attempt also fails - proc_flaky_*",
+      "priority": 2,
+      "scenarioName": "settle-flaky",
+      "requiredScenarioState": "failed-once",
+      "newScenarioState": "failed-twice",
+      "request": {
+        "method": "POST",
+        "urlPathPattern": "/processor/v1/authorizations/proc_flaky_[^/]+/settle"
+      },
+      "response": {
+        "status": 503,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "error": "settlement_timeout", "attempt": 2 }
+      }
+    },
+
+    {
+      "name": "settle: third attempt succeeds - proc_flaky_*",
+      "priority": 2,
+      "scenarioName": "settle-flaky",
+      "requiredScenarioState": "failed-twice",
+      "request": {
+        "method": "POST",
+        "urlPathPattern": "/processor/v1/authorizations/proc_flaky_[^/]+/settle"
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "settled": true }
+      }
+    },
+
+    {
+      "name": "settle: always fails - proc_settlefail_* (shows dead-lettering)",
+      "priority": 2,
+      "request": {
+        "method": "POST",
+        "urlPathPattern": "/processor/v1/authorizations/proc_settlefail_[^/]+/settle"
+      },
+      "response": {
+        "status": 503,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "error": "settlement_service_unavailable" }
+      }
+    },
+
+    {
+      "name": "settle: success (catch-all)",
+      "priority": 10,
+      "request": {
+        "method": "POST",
+        "urlPathPattern": "/processor/v1/authorizations/[^/]+/settle"
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "settled": true }
+      }
+    }
+  ]
+}

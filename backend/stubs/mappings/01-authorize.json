@@ -1,0 +1,246 @@
+{
+  "mappings": [
+    {
+      "name": "authorize: connection reset mid-response",
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "urlPath": "/processor/v1/authorizations",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.paymentMethodToken == 'tok_processor_error')]" }]
+      },
+      "response": { "fault": "CONNECTION_RESET_BY_PEER" }
+    },
+
+    {
+      "name": "authorize: slow response, trips the client read timeout",
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "urlPath": "/processor/v1/authorizations",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.paymentMethodToken == 'tok_timeout')]" }]
+      },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 8000,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "approved": true, "processorReference": "proc_never_seen", "card": { "brand": "VISA", "last4": "4242" } }
+      }
+    },
+
+    {
+      "name": "authorize: processor returns 500",
+      "priority": 1,
+      "request": {
+        "method": "POST",
+        "urlPath": "/processor/v1/authorizations",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.paymentMethodToken == 'tok_processor_500')]" }]
+      },
+      "response": {
+        "status": 500,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "error": "internal_error" }
+      }
+    },
+
+    {
+      "name": "authorize: declined by the issuer",
+      "priority": 2,
+      "request": {
+        "method": "POST",
+        "urlPath": "/processor/v1/authorizations",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.paymentMethodToken == 'tok_decline')]" }]
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "approved": false, "declineReason": "insufficient_funds" }
+      }
+    },
+
+    {
+      "name": "authorize: approved, capture behaves like a real one-shot capture",
+      "priority": 2,
+      "request": {
+        "method": "POST",
+        "urlPath": "/processor/v1/authorizations",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.paymentMethodToken == 'tok_capture_once')]" }]
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "transformers": ["response-template"],
+        "jsonBody": {
+          "approved": true,
+          "processorReference": "proc_once_{{randomValue type='UUID'}}",
+          "card": { "brand": "VISA", "last4": "4242" }
+        }
+      }
+    },
+
+    {
+      "name": "authorize: approved, but the authorization is already expired at capture time",
+      "priority": 2,
+      "request": {
+        "method": "POST",
+        "urlPath": "/processor/v1/authorizations",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.paymentMethodToken == 'tok_capture_expired')]" }]
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "transformers": ["response-template"],
+        "jsonBody": {
+          "approved": true,
+          "processorReference": "proc_expired_{{randomValue type='UUID'}}",
+          "card": { "brand": "VISA", "last4": "4242" }
+        }
+      }
+    },
+
+    {
+      "name": "authorize: approved, capture will drop the connection",
+      "priority": 2,
+      "request": {
+        "method": "POST",
+        "urlPath": "/processor/v1/authorizations",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.paymentMethodToken == 'tok_capture_error')]" }]
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "transformers": ["response-template"],
+        "jsonBody": {
+          "approved": true,
+          "processorReference": "proc_capterr_{{randomValue type='UUID'}}",
+          "card": { "brand": "VISA", "last4": "4242" }
+        }
+      }
+    },
+
+    {
+      "name": "authorize: approved, settlement fails twice then succeeds",
+      "priority": 2,
+      "request": {
+        "method": "POST",
+        "urlPath": "/processor/v1/authorizations",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.paymentMethodToken == 'tok_settle_flaky')]" }]
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "transformers": ["response-template"],
+        "jsonBody": {
+          "approved": true,
+          "processorReference": "proc_flaky_{{randomValue type='UUID'}}",
+          "card": { "brand": "VISA", "last4": "4242" }
+        }
+      }
+    },
+
+    {
+      "name": "authorize: approved, settlement always fails and dead-letters",
+      "priority": 2,
+      "request": {
+        "method": "POST",
+        "urlPath": "/processor/v1/authorizations",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.paymentMethodToken == 'tok_settle_fail')]" }]
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "transformers": ["response-template"],
+        "jsonBody": {
+          "approved": true,
+          "processorReference": "proc_settlefail_{{randomValue type='UUID'}}",
+          "card": { "brand": "VISA", "last4": "4242" }
+        }
+      }
+    },
+
+    {
+      "name": "authorize: over the issuer limit (amountMinor > 100000, i.e. $1,000.00)",
+      "priority": 3,
+      "request": {
+        "method": "POST",
+        "urlPath": "/processor/v1/authorizations",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.amountMinor > 100000)]" }]
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "approved": false, "declineReason": "exceeds_limit" }
+      }
+    },
+
+    {
+      "name": "authorize: approved VISA",
+      "priority": 4,
+      "request": {
+        "method": "POST",
+        "urlPath": "/processor/v1/authorizations",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.paymentMethodToken == 'tok_visa')]" }]
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "transformers": ["response-template"],
+        "jsonBody": {
+          "approved": true,
+          "processorReference": "proc_{{randomValue type='UUID'}}",
+          "card": { "brand": "VISA", "last4": "4242" }
+        }
+      }
+    },
+
+    {
+      "name": "authorize: approved VISA (tok_success alias)",
+      "priority": 4,
+      "request": {
+        "method": "POST",
+        "urlPath": "/processor/v1/authorizations",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.paymentMethodToken == 'tok_success')]" }]
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "transformers": ["response-template"],
+        "jsonBody": {
+          "approved": true,
+          "processorReference": "proc_{{randomValue type='UUID'}}",
+          "card": { "brand": "VISA", "last4": "4242" }
+        }
+      }
+    },
+
+    {
+      "name": "authorize: approved Mastercard",
+      "priority": 4,
+      "request": {
+        "method": "POST",
+        "urlPath": "/processor/v1/authorizations",
+        "bodyPatterns": [{ "matchesJsonPath": "$[?(@.paymentMethodToken == 'tok_mastercard')]" }]
+      },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "transformers": ["response-template"],
+        "jsonBody": {
+          "approved": true,
+          "processorReference": "proc_{{randomValue type='UUID'}}",
+          "card": { "brand": "MASTERCARD", "last4": "4444" }
+        }
+      }
+    },
+
+    {
+      "name": "authorize: unknown token (catch-all)",
+      "priority": 10,
+      "request": { "method": "POST", "urlPath": "/processor/v1/authorizations" },
+      "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "jsonBody": { "approved": false, "declineReason": "invalid_payment_method" }
+      }
+    }
+  ]
+}

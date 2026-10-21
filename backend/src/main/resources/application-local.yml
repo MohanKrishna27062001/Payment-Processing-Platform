@@ -1,0 +1,16 @@
+# Local development, no Docker and no second service.
+#
+#   ./mvnw spring-boot:run -Dspring-boot.run.profiles=local      (Windows: .\run-local.cmd)
+#
+# Starts the application on 8080 and a fake payment processor on 8089 in the same JVM. The calls between them
+# are real HTTP, so timeouts, slow responses and dropped connections behave exactly as they would in production.
+# Requires a locally installed PostgreSQL; see scripts/create-local-db.sql for the one-time setup.
+app:
+  processor:
+    mode: http
+    base-url: http://localhost:8089
+    stub-server:
+      enabled: true
+      port: 8089
+      # Relative to the directory the application is started from (the 'backend' folder).
+      root: stubs
